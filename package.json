@@ -1,0 +1,82 @@
+{
+  "name": "framebox",
+  "version": "0.1.0",
+  "description": "FrameBox 本地电影库管理工具",
+  "productName": "FrameBox",
+  "author": "FrameBox",
+  "main": "dist-electron/electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev:renderer": "vite --host 127.0.0.1",
+    "dev:electron": "wait-on tcp:5173 && tsc -p tsconfig.electron.json && electron .",
+    "build": "tsc -p tsconfig.electron.json && vite build",
+    "dist": "npm run build && electron-builder --dir",
+    "dist:release": "npm run build && electron-builder",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit"
+  },
+  "dependencies": {
+    "ffprobe-static": "^3.1.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sql.js": "^1.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.framebox.app",
+    "productName": "FrameBox",
+    "directories": {
+      "output": "release"
+    },
+    "artifactName": "${productName} 免安装版 ${version}.${ext}",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/sql.js/dist/sql-wasm.wasm",
+        "to": "sql-wasm.wasm"
+      },
+      {
+        "from": "node_modules/ffprobe-static/bin",
+        "to": "ffprobe"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "artifactName": "${productName} 安装程序 ${version}.${ext}",
+      "language": "2052",
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "displayLanguageSelector": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "uninstallDisplayName": "FrameBox 本地电影库",
+      "shortcutName": "FrameBox"
+    }
+  }
+}
