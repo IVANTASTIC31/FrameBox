@@ -78,6 +78,7 @@ export interface MovieSummary {
   resolution: string | null;
   coverPath: string | null;
   coverUrl: string | null;
+  previewUrls: string[];
   actors: string[];
   genres: string[];
   fileCount: number;

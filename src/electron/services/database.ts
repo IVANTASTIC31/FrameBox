@@ -715,6 +715,7 @@ export class DatabaseService {
       resolution: row.resolution,
       coverPath: row.cover_path,
       coverUrl: toFileUrl(row.cover_path),
+      previewUrls: this.getMovieStillPreviewUrls(row.id),
       actors: this.getTags("movie_actors", row.id),
       genres: this.getTags("movie_genres", row.id),
       fileCount: row.file_count,
@@ -755,6 +756,19 @@ export class DatabaseService {
     return this.all<{ name: string }>(`SELECT name FROM ${table} WHERE movie_id = ? ORDER BY name COLLATE NOCASE`, [
       movieId
     ]).map((row) => row.name);
+  }
+
+  private getMovieStillPreviewUrls(movieId: string): string[] {
+    return this.all<MovieImageRow>(
+      `SELECT id, movie_id, kind, path, sort_order, created_at
+       FROM movie_images
+       WHERE movie_id = ? AND kind = 'still'
+       ORDER BY sort_order ASC, created_at ASC
+       LIMIT 8`,
+      [movieId]
+    )
+      .map((row) => toFileUrl(row.path))
+      .filter((url): url is string => Boolean(url));
   }
 
   private asPlayerMode(value: string | undefined): PlayerMode {

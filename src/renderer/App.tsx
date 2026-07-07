@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Clapperboard,
   Database,
@@ -147,11 +147,6 @@ export function App() {
 
     return () => window.clearTimeout(timer);
   }, [query]);
-
-  const selectedMovieSummary = useMemo(
-    () => movies.find((movie) => movie.id === selectedMovie?.id) ?? null,
-    [movies, selectedMovie]
-  );
 
   async function runTask<T>(task: () => Promise<T>, success?: string): Promise<T | null> {
     setBusy(true);
@@ -385,10 +380,10 @@ export function App() {
           <LibraryView
             movies={movies}
             selectedMovie={selectedMovie}
-            selectedMovieSummary={selectedMovieSummary}
             busy={busy}
             onOpenMovie={openMovie}
             onPlayMovie={playMovie}
+            onCloseMovie={() => setSelectedMovie(null)}
             onChooseSourceDirectory={chooseMovieSourceDirectory}
             onNewMovie={() => setSelectedMovie({ ...movieInputToDetails(emptyMovieInput), id: "" })}
             onSaveMovie={saveMovie}
@@ -478,10 +473,10 @@ function SourceReadLoadingOverlay({ overlay }: { overlay: SourceReadOverlay }) {
 interface LibraryViewProps {
   movies: MovieSummary[];
   selectedMovie: MovieDetails | null;
-  selectedMovieSummary: MovieSummary | null;
   busy: boolean;
   onOpenMovie(id: string): void;
   onPlayMovie(id: string): void;
+  onCloseMovie(): void;
   onChooseSourceDirectory(): void;
   onNewMovie(): void;
   onSaveMovie(movie: MovieInput): void;
@@ -494,7 +489,7 @@ interface LibraryViewProps {
 
 function LibraryView(props: LibraryViewProps) {
   return (
-    <div className="split-layout">
+    <div className="library-layout">
       <section className="content-pane">
         <div className="section-toolbar">
           <div>
@@ -522,37 +517,22 @@ function LibraryView(props: LibraryViewProps) {
         ) : (
           <div className="movie-grid">
             {props.movies.map((movie) => (
-              <button
-                className={`movie-card ${props.selectedMovie?.id === movie.id ? "selected" : ""}`}
+              <MovieCard
                 key={movie.id}
-                title="双击播放"
-                onClick={() => props.onOpenMovie(movie.id)}
-                onDoubleClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  props.onPlayMovie(movie.id);
-                }}
-              >
-                <div className="poster">
-                  {movie.coverUrl ? <img src={movie.coverUrl} alt={movie.title} /> : <Clapperboard size={36} />}
-                </div>
-                <div className="movie-card-body">
-                  <span className="movie-code">{movie.code}</span>
-                  <strong>{movie.title}</strong>
-                  <small>{[movie.year, movie.resolution, formatDuration(movie.durationSeconds)].filter(Boolean).join(" · ")}</small>
-                  <TagLine tags={[...movie.actors.slice(0, 2), ...movie.genres.slice(0, 1)]} />
-                </div>
-              </button>
+                movie={movie}
+                selected={props.selectedMovie?.id === movie.id}
+                onOpen={props.onOpenMovie}
+                onPlay={props.onPlayMovie}
+              />
             ))}
           </div>
         )}
       </section>
 
-      <aside className="detail-pane">
-        {props.selectedMovie ? (
+      {props.selectedMovie && (
+        <MovieDetailsModal onClose={props.onCloseMovie}>
           <MovieEditor
             movie={props.selectedMovie}
-            summary={props.selectedMovieSummary}
             busy={props.busy}
             onSave={props.onSaveMovie}
             onDelete={props.onDeleteMovie}
@@ -561,17 +541,105 @@ function LibraryView(props: LibraryViewProps) {
             onPlayFile={props.onPlayFile}
             onReveal={props.onReveal}
           />
-        ) : (
-          <EmptyState icon={<Pencil size={30} />} title="选择一部电影" text="在右侧编辑番号、标题、演员、类型、封面和视频文件。" />
+        </MovieDetailsModal>
+      )}
+    </div>
+  );
+}
+
+function MovieCard({
+  movie,
+  selected,
+  onOpen,
+  onPlay
+}: {
+  movie: MovieSummary;
+  selected: boolean;
+  onOpen(id: string): void;
+  onPlay(id: string): void;
+}) {
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const stillUrls = movie.previewUrls;
+  const activePreviewUrl = isPreviewing && stillUrls.length > 0 ? stillUrls[previewIndex] : movie.coverUrl;
+
+  useEffect(() => {
+    if (!isPreviewing || stillUrls.length <= 1) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setPreviewIndex((current) => (current + 1) % stillUrls.length);
+    }, 1100);
+
+    return () => window.clearInterval(timer);
+  }, [isPreviewing, stillUrls.length]);
+
+  useEffect(() => {
+    setPreviewIndex(0);
+  }, [movie.id, stillUrls.length]);
+
+  return (
+    <article className={`movie-card ${selected ? "selected" : ""}`}>
+      <div
+        className="poster poster-preview"
+        onMouseEnter={() => {
+          setPreviewIndex(0);
+          setIsPreviewing(true);
+        }}
+        onMouseLeave={() => {
+          setIsPreviewing(false);
+          setPreviewIndex(0);
+        }}
+      >
+        {activePreviewUrl ? <img src={activePreviewUrl} alt={movie.title} /> : <Clapperboard size={36} />}
+        {isPreviewing && stillUrls.length > 1 && (
+          <span className="preview-badge">
+            {previewIndex + 1}/{stillUrls.length}
+          </span>
         )}
-      </aside>
+      </div>
+
+      <button className="movie-card-body" title="打开电影详情" onClick={() => onOpen(movie.id)}>
+        <span className="movie-code">{movie.code}</span>
+        <strong>{movie.title}</strong>
+        <small>{[movie.year, movie.resolution, formatDuration(movie.durationSeconds)].filter(Boolean).join(" · ")}</small>
+        <TagLine tags={[...movie.actors.slice(0, 2), ...movie.genres.slice(0, 1)]} />
+      </button>
+
+      <button className="movie-play-button" title="播放" onClick={() => onPlay(movie.id)}>
+        <Play size={16} />
+      </button>
+    </article>
+  );
+}
+
+function MovieDetailsModal({ children, onClose }: { children: React.ReactNode; onClose(): void }) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" onMouseDown={onClose}>
+      <div className="modal-panel movie-detail-modal" onMouseDown={(event) => event.stopPropagation()}>
+        <button className="modal-close" title="关闭" onClick={onClose}>
+          <X size={18} />
+        </button>
+        {children}
+      </div>
     </div>
   );
 }
 
 interface MovieEditorProps {
   movie: MovieDetails;
-  summary: MovieSummary | null;
   busy: boolean;
   onSave(movie: MovieInput): void;
   onDelete(id: string): void;
@@ -592,19 +660,8 @@ function MovieEditor({ movie, busy, onSave, onDelete, onAddImage, onRemoveImage,
 
   return (
     <div className="editor">
-      <div className="editor-header">
-        <div>
-          <span>详情编辑</span>
-          <strong>{draft.code || "新建电影"}</strong>
-        </div>
-        <button className="primary" disabled={busy} onClick={() => onSave(draft)}>
-          <Save size={16} />
-          保存
-        </button>
-      </div>
-
       <div className="cover-preview">
-        {movie.coverUrl ? <img src={movie.coverUrl} alt={movie.title} /> : <Clapperboard size={36} />}
+        {movie.coverUrl ? <img src={movie.coverUrl} alt={movie.title} /> : <Clapperboard size={44} />}
         {hasPersistentId && (
           <button onClick={() => onAddImage(movie.id, "cover")}>
             <ImagePlus size={16} />
@@ -613,12 +670,20 @@ function MovieEditor({ movie, busy, onSave, onDelete, onAddImage, onRemoveImage,
         )}
       </div>
 
-      <div className="form-grid">
+      <div className="title-edit-row">
+        <label className="field title-field">
+          <span>标题</span>
+          <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
+        </label>
+        <button className="primary" disabled={busy} onClick={() => onSave(draft)}>
+          <Save size={16} />
+          保存
+        </button>
+      </div>
+
+      <div className="form-grid editor-info-grid">
         <Field label="影片番号">
           <input value={draft.code} onChange={(event) => setDraft({ ...draft, code: event.target.value })} />
-        </Field>
-        <Field label="标题">
-          <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
         </Field>
         <Field label="年份">
           <input value={draft.year} onChange={(event) => setDraft({ ...draft, year: event.target.value })} />
@@ -636,16 +701,17 @@ function MovieEditor({ movie, busy, onSave, onDelete, onAddImage, onRemoveImage,
             }
           />
         </Field>
-        <Field label="主演">
+        <Field label="主演" full>
           <TagInput value={draft.actors} onChange={(actors) => setDraft({ ...draft, actors })} placeholder="输入后回车" />
         </Field>
-        <Field label="类型">
+        <Field label="类型" full>
           <TagInput value={draft.genres} onChange={(genres) => setDraft({ ...draft, genres })} placeholder="输入后回车" />
         </Field>
-        <Field label="备注" full>
-          <textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} />
-        </Field>
       </div>
+
+      <Field label="备注" full>
+        <textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} />
+      </Field>
 
       {hasPersistentId && (
         <>
@@ -655,12 +721,7 @@ function MovieEditor({ movie, busy, onSave, onDelete, onAddImage, onRemoveImage,
               <span className="muted">暂无绑定视频</span>
             ) : (
               movie.files.map((file) => (
-                <div
-                  className="file-row"
-                  key={file.id}
-                  title="双击播放"
-                  onDoubleClick={() => onPlayFile(file.id)}
-                >
+                <div className="file-row" key={file.id}>
                   <div>
                     <strong title={file.path}>{file.filename}</strong>
                     <span>
@@ -1146,6 +1207,7 @@ function movieInputToDetails(movie: MovieInput): MovieDetails {
     resolution: movie.resolution,
     coverPath: movie.coverPath,
     coverUrl: null,
+    previewUrls: [],
     fileCount: 0,
     files: [],
     stills: [],
