@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Clapperboard,
   Database,
@@ -63,6 +63,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [sourceReadOverlay, setSourceReadOverlay] = useState<SourceReadOverlay | null>(null);
+  const sourceReadCloseTimer = useRef<number | null>(null);
 
   const refresh = async (nextQuery = query) => {
     const [nextSettings, nextDirs, nextMovies, nextUnclassified] = await Promise.all([
@@ -89,6 +90,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    return () => clearSourceReadCloseTimer();
+  }, []);
+
+  useEffect(() => {
     return window.frameBox.onChooseMovieSource(() => {
       void chooseMovieSourceDirectory();
     });
@@ -96,6 +101,7 @@ export function App() {
 
   useEffect(() => {
     return window.frameBox.onMovieSourceSelected((payload) => {
+      clearSourceReadCloseTimer();
       setBusy(false);
       setSourceReadOverlay(null);
       setMessage(`已读取电影源目录：${payload.path}。当前未分类区共有 ${payload.unclassifiedCount} 个视频。`);
@@ -105,6 +111,7 @@ export function App() {
 
   useEffect(() => {
     return window.frameBox.onMovieSourceReading((payload) => {
+      clearSourceReadCloseTimer();
       setBusy(true);
       setMessage(null);
       setSourceReadOverlay({
@@ -127,6 +134,10 @@ export function App() {
             ? "读取完成"
             : "正在读取视频信息";
 
+      if (progress.phase !== "complete") {
+        clearSourceReadCloseTimer();
+      }
+
       setSourceReadOverlay((current) => ({
         title,
         path: progress.rootPath || current?.path || progress.currentPath || "电影源目录",
@@ -135,11 +146,16 @@ export function App() {
         processed: progress.processed,
         total: progress.total > 0 ? progress.total : null
       }));
+
+      if (progress.phase === "complete") {
+        closeSourceReadOverlaySoon();
+      }
     });
   }, []);
 
   useEffect(() => {
     return window.frameBox.onMovieSourceReadFailed((payload) => {
+      clearSourceReadCloseTimer();
       setBusy(false);
       setSourceReadOverlay(null);
       setMessage(`读取电影源目录失败：${payload.message}`);
@@ -170,6 +186,23 @@ export function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function clearSourceReadCloseTimer() {
+    if (sourceReadCloseTimer.current === null) {
+      return;
+    }
+
+    window.clearTimeout(sourceReadCloseTimer.current);
+    sourceReadCloseTimer.current = null;
+  }
+
+  function closeSourceReadOverlaySoon(delayMs = 700) {
+    clearSourceReadCloseTimer();
+    sourceReadCloseTimer.current = window.setTimeout(() => {
+      setSourceReadOverlay(null);
+      sourceReadCloseTimer.current = null;
+    }, delayMs);
   }
 
   async function openMovie(id: string) {
@@ -228,6 +261,7 @@ export function App() {
 
   async function rescan() {
     const files = await runTask(() => window.frameBox.rescanLibrary(), "扫描完成");
+    setSourceReadOverlay(null);
     if (files) {
       setUnclassified(files);
       await refreshMovies();
@@ -235,6 +269,7 @@ export function App() {
   }
 
   async function chooseMovieSourceDirectory() {
+    clearSourceReadCloseTimer();
     setBusy(true);
     setMessage(null);
 
@@ -270,6 +305,7 @@ export function App() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
+      clearSourceReadCloseTimer();
       setBusy(false);
       setSourceReadOverlay(null);
     }
