@@ -10,6 +10,7 @@ import type {
 } from "../shared/types.js";
 
 const api: FrameBoxApi = {
+  getStartupWarning: () => ipcRenderer.invoke("app:getStartupWarning"),
   getSettings: () => ipcRenderer.invoke("settings:get"),
   selectDirectory: () => ipcRenderer.invoke("dialog:selectDirectory"),
   selectPlayer: () => ipcRenderer.invoke("dialog:selectPlayer"),

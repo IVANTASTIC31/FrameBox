@@ -18,6 +18,7 @@ interface BootstrapConfig {
 export class DataDirectoryService {
   private bootstrapPath = "";
   private paths: FrameBoxPaths | null = null;
+  private startupWarning: string | null = null;
 
   async init(): Promise<FrameBoxPaths> {
     app.setName("FrameBox");
@@ -26,8 +27,22 @@ export class DataDirectoryService {
     this.bootstrapPath = path.join(userDataDir, "bootstrap.json");
 
     const bootstrap = await this.readBootstrap();
-    const dataDir = bootstrap.dataDir || path.join(app.getPath("appData"), "FrameBox");
-    this.paths = await this.ensurePaths(dataDir);
+    const defaultDataDir = path.join(app.getPath("appData"), "FrameBox");
+    const dataDir = bootstrap.dataDir || defaultDataDir;
+
+    try {
+      this.paths = await this.ensurePaths(dataDir);
+    } catch (error) {
+      if (path.resolve(dataDir).toLowerCase() === path.resolve(defaultDataDir).toLowerCase()) {
+        throw error;
+      }
+
+      this.paths = await this.ensurePaths(defaultDataDir);
+      const message = error instanceof Error ? error.message : String(error);
+      this.startupWarning =
+        `上次设置的数据目录暂时不可访问，FrameBox 已使用默认数据目录启动。不可访问目录：${dataDir}。原因：${message}`;
+    }
+
     return this.paths;
   }
 
@@ -37,6 +52,10 @@ export class DataDirectoryService {
     }
 
     return this.paths;
+  }
+
+  getStartupWarning(): string | null {
+    return this.startupWarning;
   }
 
   async changeDataDir(nextDataDir: string, exportDb: () => Uint8Array): Promise<FrameBoxPaths> {

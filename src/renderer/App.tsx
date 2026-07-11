@@ -79,7 +79,13 @@ export function App() {
   };
 
   useEffect(() => {
-    void runTask(() => refresh(""));
+    void runTask(() => refresh("")).then(() => {
+      void window.frameBox.getStartupWarning().then((warning) => {
+        if (warning) {
+          setMessage(warning);
+        }
+      });
+    });
   }, []);
 
   useEffect(() => {
@@ -189,7 +195,10 @@ export function App() {
 
     setSelectedMovie(movie);
     setView("library");
-    await runTask(() => window.frameBox.playMovieFile(file.id));
+    const played = await runTask(() => window.frameBox.playMovieFile(file.id));
+    if (played === null) {
+      await refreshMovies();
+    }
   }
 
   async function refreshMovies() {
@@ -403,7 +412,12 @@ export function App() {
                 await refreshMovies();
               }
             }}
-            onPlayFile={(fileId) => runTask(() => window.frameBox.playMovieFile(fileId))}
+            onPlayFile={async (fileId) => {
+              const played = await runTask(() => window.frameBox.playMovieFile(fileId));
+              if (played === null) {
+                await refreshMovies();
+              }
+            }}
             onReveal={(targetPath) => runTask(() => window.frameBox.revealPath(targetPath))}
           />
         )}
@@ -728,6 +742,7 @@ function MovieEditor({ movie, busy, onSave, onDelete, onAddImage, onRemoveImage,
                       {file.isPrimary ? "主文件 · " : ""}
                       {[file.resolution, formatDuration(file.durationSeconds), formatBytes(file.sizeBytes)].filter(Boolean).join(" · ")}
                     </span>
+                    {file.status === "missing" && <StatusBadge status="missing" />}
                   </div>
                   <button title="播放" onClick={() => onPlayFile(file.id)}>
                     <Play size={16} />
@@ -1154,8 +1169,9 @@ function TagLine({ tags }: { tags: string[] }) {
   );
 }
 
-function StatusBadge({ status }: { status: UnclassifiedFile["status"] }) {
-  const text = status === "conflict" ? "番号冲突" : status === "parse_error" ? "解析异常" : "待整理";
+function StatusBadge({ status }: { status: UnclassifiedFile["status"] | "missing" }) {
+  const text =
+    status === "conflict" ? "番号冲突" : status === "parse_error" ? "解析异常" : status === "missing" ? "文件缺失" : "待整理";
   return <span className={`status ${status}`}>{text}</span>;
 }
 

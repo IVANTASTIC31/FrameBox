@@ -937,6 +937,11 @@ select:focus {
   color: #8a3027;
 }
 
+.status.missing {
+  background: #ffe8e2;
+  color: #8a3027;
+}
+
 .file-summary {
   border: 1px solid #ded8c9;
   background: #fffdf8;

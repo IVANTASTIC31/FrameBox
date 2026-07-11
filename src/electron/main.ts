@@ -1,4 +1,5 @@
 import path from "node:path";
+import fsp from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
   app,
@@ -190,6 +191,8 @@ function sendUnclassifiedChanged(): void {
 }
 
 function registerIpcHandlers(): void {
+  ipcMain.handle("app:getStartupWarning", () => dataDirectory.getStartupWarning());
+
   ipcMain.handle("settings:get", () => database.getSettings());
 
   ipcMain.handle("dialog:selectDirectory", async () => {
@@ -305,16 +308,36 @@ function registerIpcHandlers(): void {
       throw new Error("未找到视频文件。");
     }
 
+    const readable = await pathIsReadable(file.path);
+    await database.markMovieFileStatus(file.path, readable);
+    await database.flush();
+    if (!readable) {
+      throw new Error(`无法读取视频文件：${file.path}。请确认对应硬盘、移动存储或网络位置已连接。`);
+    }
+
     await player.play(file, database.getSettings());
   });
 
   ipcMain.handle("shell:revealPath", async (_event, targetPath: string) => {
+    if (!(await pathIsReadable(targetPath))) {
+      throw new Error(`无法定位文件：${targetPath}。请确认对应存储设备已连接。`);
+    }
+
     shell.showItemInFolder(targetPath);
   });
 }
 
 function showOpenDialog(options: OpenDialogOptions) {
   return mainWindow ? dialog.showOpenDialog(mainWindow, options) : dialog.showOpenDialog(options);
+}
+
+async function pathIsReadable(targetPath: string): Promise<boolean> {
+  try {
+    await fsp.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 app.whenReady().then(async () => {

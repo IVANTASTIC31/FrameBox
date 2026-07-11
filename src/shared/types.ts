@@ -138,6 +138,7 @@ export interface AddImagePayload {
 }
 
 export interface FrameBoxApi {
+  getStartupWarning(): Promise<string | null>;
   getSettings(): Promise<AppSettings>;
   selectDirectory(): Promise<string | null>;
   selectPlayer(): Promise<string | null>;
